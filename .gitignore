@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# YOLO training output
+runs/
+
+# Models (optional: keep face + weapon model out of repo)
+models/*.pt
+
+# Dataset
+data/weapons/
+data/**/*.jpg
+data/**/*.png
+data/**/*.jpeg
+*.yaml
+
+# macOS junk
+.DS_Store
+
+# Virtual env
+venv/
+.env/
