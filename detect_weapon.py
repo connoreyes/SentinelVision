@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import cv2
 class WeaponDetector:
-    def __init__ (self, model_path = "models/best.pt"):
+    def __init__ (self, model_path = "models/yolov8s-weapon.pt"):
         self.model = YOLO(model_path)
 
     def detect_weapon(self, frame, conf_threshold=0.4):

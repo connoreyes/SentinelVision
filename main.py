@@ -1,34 +1,154 @@
+# main.py — FULL STABLE IDENTITY VERSION (Option B)
+
 import cv2
-from detect_face import FaceDetector
-from detect_weapon import WeaponDetector
-from utils.draw import draw_boxes, draw_weapon_boxes
+import numpy as np
+from ultralytics import YOLO
+from threading import Thread
+from datetime import datetime
 
-def main():
-    face_detector = FaceDetector()
-    weapon_detector = WeaponDetector()
+from database import FaceDatabase
+from identify_person import FaceIdentifier   # ← THIS IS YOUR NEW ID ENGINE
 
-    cap = cv2.VideoCapture(0)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+# ============================================================
+# HIGH-FPS WEBCAM THREAD
+# ============================================================
+class WebcamStream:
+    def __init__(self, src=0):
+        self.cap = cv2.VideoCapture(src)
+        self.ret, self.frame = self.cap.read()
+        self.running = True
+        Thread(target=self.update, daemon=True).start()
 
-        # Detect faces
-        face_boxes = face_detector.detect_face(frame)
-        frame = draw_boxes(frame, face_boxes, label="Face")
+    def update(self):
+        while self.running:
+            self.ret, self.frame = self.cap.read()
 
-        # Detect weapons
-        weapon_boxes = weapon_detector.detect_weapon(frame)
-        frame = draw_weapon_boxes(frame, weapon_boxes)
+    def read(self):
+        return self.frame
 
-        cv2.imshow("SentinelVision", frame)
+    def stop(self):
+        self.running = False
+        self.cap.release()
 
-        if cv2.waitKey(1) == ord('q'):
-            break
 
-    cap.release()
-    cv2.destroyAllWindows()
+# ============================================================
+# LOAD MODELS + DATABASE
+# ============================================================
+print("[INFO] Loading models...")
 
-if __name__ == "__main__":
-    main()
+face_model = YOLO("models/yolov8n-face.pt")
+weapon_model = YOLO("models/yolov8s-weapon.pt")
+
+db = FaceDatabase()
+identifier = FaceIdentifier(db=db, threshold=0.40, alpha=0.12)
+
+print(f"[INFO] Loaded {db.count_persons()} known persons.")
+
+# webcam thread
+cap = WebcamStream(0)
+
+print("[INFO] SentinelVision running... Press 'q' to quit.")
+
+
+# ============================================================
+# FRAME LOOP
+# ============================================================
+while True:
+
+    frame = cap.read()
+    if frame is None:
+        continue
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # --------------------------------------------------------
+    # 1. FACE DETECTION
+    # --------------------------------------------------------
+    face_results = face_model.predict(frame, imgsz=320, verbose=False)
+    detected_faces = []
+
+    for r in face_results:
+        for box in r.boxes:
+
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+            face_img = frame[y1:y2, x1:x2]
+            if face_img.size == 0:
+                continue
+
+            # -----------------------------------------
+            # ARC-FACE EMBEDDING → MATCH OR NEW PERSON
+            # -----------------------------------------
+            try:
+                embedding = identifier.get_embedding(face_img)
+            except:
+                continue
+
+            person_id, dist, is_new = identifier.identify_or_create(
+                embedding, timestamp=timestamp
+            )
+
+            if is_new:
+                print(f"[NEW] Person {person_id} detected (dist={dist:.4f})")
+            else:
+                print(f"[MATCH] Person {person_id} (dist={dist:.4f})")
+
+            detected_faces.append((x1, y1, x2, y2, person_id))
+
+
+    # --------------------------------------------------------
+    # 2. WEAPON DETECTION
+    # --------------------------------------------------------
+    weapon_results = weapon_model.predict(frame, imgsz=320, verbose=False)
+    weapon_detected = False
+
+    for r in weapon_results:
+        for box in r.boxes:
+            conf = float(box.conf[0])
+            if conf < 0.45:
+                continue
+
+            weapon_detected = True
+            wx1, wy1, wx2, wy2 = map(int, box.xyxy[0])
+
+            cv2.rectangle(frame, (wx1, wy1), (wx2, wy2), (0, 0, 255), 2)
+            cv2.putText(frame, f"Weapon {conf:.2f}", (wx1, wy1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+
+    # --------------------------------------------------------
+    # 3. THREAT LEVEL DISPLAY
+    # --------------------------------------------------------
+    if weapon_detected:
+        status = "HIGH THREAT"
+        color = (0, 0, 255)
+    else:
+        status = "LOW THREAT"
+        color = (0, 255, 0)
+
+    cv2.putText(frame, f"Threat: {status}", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+
+
+    # --------------------------------------------------------
+    # 4. DRAW FACE BOXES + IDs
+    # --------------------------------------------------------
+    for (x1, y1, x2, y2, pid) in detected_faces:
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(frame, f"Person {pid}", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
+
+
+    # --------------------------------------------------------
+    # 5. SHOW FRAME
+    # --------------------------------------------------------
+    cv2.imshow("SentinelVision — Identity Engine v2.0", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
+# cleanup
+cap.stop()
+cv2.destroyAllWindows()
