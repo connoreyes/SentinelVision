@@ -39,59 +39,15 @@ It uses **YOLOv8**, **DeepFace embeddings**, **OpenCV**, and a **SQLite identity
 ---
 
 ## System Architecture
-flowchart TD
-
-%% ==== INPUT LAYER ====
-A[📷 Camera Input] --> B[Threaded Webcam Capture\n(WebcamStream)]
-
-%% ==== FACE DETECTION ====
-B --> C[YOLOv8n-Face\nFace Detector]
-
-C -->|Face Bounding Boxes| D[Crop Face Regions]
-
-%% ==== EMBEDDING PIPELINE ====
-D --> E[DeepFace ArcFace\n(L2-normalized Embedding)]
-
-E --> F[Identify_or_Create()\nFaceIdentifier]
-
-%% ==== IDENTITY MATCHING ====
-F -->|Match < Threshold| G[Existing Person\n(Update with EMA)]
-F -->|No Match| H[Create New Person]
-
-G --> I[Update Person Embedding\n(database)]
-H --> J[Insert New Person\n(database)]
-
-%% ==== SIGHTING LOG ====
-F --> K[Add Face Observation\n(timestamped)]
-
-%% ==== WEAPON DETECTION PARALLEL ====
-B --> L[YOLOv8s-Weapon\nDetector]
-L --> M{Weapon Detected?}
-
-M -->|Yes| N[THREAT_LEVEL = HIGH]
-M -->|No| O[THREAT_LEVEL = LOW]
-
-%% ==== OVERLAY + OUTPUT ====
-D --> P[Draw Face Boxes + IDs]
-M --> P
-P --> Q[Display Final Frame\n(OpenCV imshow)]
-
-%% ==== DATABASE ====
-I --> R[(SQLite: persons)]
-J --> R
-K --> S[(SQLite: faces)]
-
-style A fill:#e3f2fd,stroke:#42a5f5,stroke-width:2px
-style C fill:#fff3cd,stroke:#ffca2c,stroke-width:2px
-style D fill:#fff3cd,stroke:#ffca2c,stroke-width:2px
-style E fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px
-style F fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px
-style G fill:#c8e6c9,stroke:#43a047,stroke-width:2px
-style H fill:#c8e6c9,stroke:#43a047,stroke-width:2px
-style L fill:#fdecea,stroke:#f44336,stroke-width:2px
-style M fill:#ffebee,stroke:#e53935,stroke-width:2px
-style P fill:#ede7f6,stroke:#7e57c2,stroke-width:2px
-style Q fill:#ede7f6,stroke:#7e57c2,stroke-width:2px
+Camera
+→ YOLO Face Detector
+→ Face Crop
+→ DeepFace Embeddings
+→ Identity Matching (SQLite)
+→ Threat Logic
+→ YOLO Weapon Detector
+→ Render Overlay (Threat Levels + IDs)
+---
 
 ## 📦 Tech Stack
 
