@@ -22,10 +22,10 @@ def expand_box(x1, y1, x2, y2, frame_shape, scale=0.3):
     return nx1, ny1, nx2, ny2
 
 class FaceDetector:
-    def __init__(self, mode_path="models/yolov8n-face.pt"):
-        self.model = YOLO(mode_path)
+    def __init__(self, model_path="models/yolov8n-face.pt"):
+        self.model = YOLO(model_path)
 
-        def detect_faces(self, frame):
+    def detect_faces(self, frame):
         """
         Returns: [(x1, y1, x2, y2, face_img)]
         """
@@ -58,6 +58,8 @@ class FaceDetector:
                 if face_img.size == 0:
                     continue
 
+
                 faces.append((x1, y1, x2, y2, face_img))
+
 
         return faces

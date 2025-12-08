@@ -1,15 +1,16 @@
 # main.py — FULL STABLE IDENTITY VERSION (Option B)
-
+import serial, time
 import cv2
 import numpy as np
 from ultralytics import YOLO
 from threading import Thread
 from datetime import datetime
+from detect_face import FaceDetector
 
 from database import FaceDatabase
 from identify_person import FaceIdentifier   # ← THIS IS YOUR NEW ID ENGINE
 
-
+ser = serial.Serial('/dev/cu.usbmodem2101', 115200)
 # ============================================================
 # HIGH-FPS WEBCAM THREAD
 # ============================================================
@@ -47,6 +48,8 @@ print(f"[INFO] Loaded {db.count_persons()} known persons.")
 
 # webcam thread
 cap = WebcamStream(0)
+# Face detector
+face_detector = FaceDetector("models/yolov8n-face.pt")
 
 print("[INFO] SentinelVision running... Press 'q' to quit.")
 
@@ -120,12 +123,38 @@ while True:
     # --------------------------------------------------------
     # 3. THREAT LEVEL DISPLAY
     # --------------------------------------------------------
+    # arduino threat detection
+    # default location if no faces
+    faces = face_detector.detect_faces(frame)
+
+    if len(faces) > 0:
+        person = 1
+        x1, y1, x2, y2, face_img = faces[0]
+
+        cx = int((x1 + x2) / 2)
+        cy = int((y1 + y2) / 2)
+    else:
+        person = 0
+        cx, cy = 0, 0
+
     if weapon_detected:
+        threat = 90
         status = "HIGH THREAT"
         color = (0, 0, 255)
     else:
+        if person == 1:
+            threat = 15
+        else:
+            threat = 0
         status = "LOW THREAT"
         color = (0, 255, 0)
+
+    # arduino 
+    # Format message EXACTLY how Arduino expects
+    msg = f"PERSON:{person},THREAT:{threat},X:{cx},Y:{cy}\n"
+
+    ser.write(msg.encode())
+
 
     cv2.putText(frame, f"Threat: {status}", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
